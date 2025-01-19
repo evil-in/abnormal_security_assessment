@@ -1,0 +1,1 @@
+select COUNT(distinct detector_id) AS cnt_detectors from detector_events;
