@@ -1,0 +1,18 @@
+WITH flagged_events AS (
+    SELECT
+        COUNT(ue.user_id) AS total_events,
+        SUM(CASE WHEN de.detector_id IS NOT NULL THEN 1 ELSE 0 END) AS flagged_any_confidence,
+        SUM(CASE WHEN de.detector_id IS NOT NULL AND confidence_level = 'HIGH' THEN 1 ELSE 0 END) AS flagged_high_confidence
+    FROM
+        user_events AS ue
+    LEFT JOIN detector_events AS de 
+    ON ue.customer_id = de.customer_id 
+    AND ue.user_id = de.user_id
+    AND ue.event_id = de.event_id
+)
+
+SELECT
+    ROUND(flagged_any_confidence * 100.0 / total_events, 2) AS fraction_flagged_any_confidence,
+    ROUND(flagged_high_confidence * 100.0 / total_events, 2) AS fraction_flagged_high_confidence
+FROM
+    flagged_events;
