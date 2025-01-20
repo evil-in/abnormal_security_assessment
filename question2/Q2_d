@@ -23,8 +23,8 @@ classified_cases AS (
     -- Classify events into TP and FP based on customer action type
     SELECT
         detector_id,
-        COUNT(CASE WHEN customer_action_type IN ('RESOLVE', 'ACKNOWLEDGE') THEN 1 ELSE NULL END) AS true_positives,
-        COUNT(CASE WHEN customer_action_type IN ('PAGE_VIEW', 'NOT_A_COMPRIMISE') THEN 1 ELSE NULL END) AS false_positives
+        COUNT(CASE WHEN customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) AS true_positives,
+        COUNT(CASE WHEN customer_action_type = 'NOT_A_COMPROMISE' THEN 1 ELSE NULL END) AS false_positives
     FROM 
         visible_cases
     GROUP BY 
