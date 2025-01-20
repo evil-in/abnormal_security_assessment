@@ -1,0 +1,57 @@
+WITH visible_cases AS (
+    -- Identifying cases visible to customers
+    SELECT 
+        de.detector_id,
+        de.event_id,
+        ca.case_id,
+        ca.customer_action_type
+    FROM 
+        detector_events de
+    INNER JOIN 
+        case_events AS ce
+    ON 
+        de.customer_id = ce.customer_id
+        AND de.user_id = ce.user_id
+        AND de.event_id = ce.triggering_event_id
+    INNER JOIN 
+        customer_action_events ca
+    ON 
+        ce.customer_id = ca.customer_id
+        AND ce.case_id = ca.case_id
+),
+classified_cases AS (
+    -- Classify events into TP and FP based on customer action type
+    SELECT
+        detector_id,
+        COUNT(CASE WHEN customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) AS true_positives,
+        COUNT(CASE WHEN customer_action_type = 'NOT_A_COMPROMISE' THEN 1 ELSE NULL END) AS false_positives
+    FROM 
+        visible_cases
+    GROUP BY 
+        detector_id
+),
+precision_metrics AS (
+    -- Calculate precision for each detector
+    SELECT
+        detector_id,
+        true_positives,
+        false_positives,
+        CASE 
+            WHEN (true_positives + false_positives) > 0 THEN 
+                true_positives * 100.0 / (true_positives + false_positives)
+            ELSE 
+                0 
+        END AS precision
+    FROM 
+        classified_cases
+)
+-- Find detectors with highest and lowest precision
+SELECT 
+    detector_id,
+    true_positives, 
+    false_positives,
+    precision
+FROM 
+    precision_metrics
+ORDER BY 
+    precision DESC;

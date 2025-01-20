@@ -1,0 +1,58 @@
+WITH joined_data AS (
+    -- Join the tables using the provided join conditions
+    SELECT 
+        de.event_timestamp,
+        ca.customer_action_type,
+        date_part( 'month', de.event_timestamp) AS event_month
+    FROM 
+        user_events as ue 
+    LEFT JOIN
+        detector_events de
+    ON 
+        ue.customer_id = de.customer_id 
+        AND ue.user_id = de.user_id
+        AND ue.event_id = de.event_id
+    LEFT JOIN 
+        case_events ce
+    ON 
+        ue.customer_id = ce.customer_id
+        AND ue.user_id = ce.user_id
+        AND ue.event_id = ce.triggering_event_id
+    LEFT JOIN 
+        customer_action_events ca
+    ON 
+        ce.customer_id = ca.customer_id
+        AND ce.case_id = ca.case_id
+),
+monthly_metrics AS (
+    -- Aggregate true positives and false negatives for each month
+    SELECT 
+        event_month,
+        COUNT(CASE WHEN customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) AS true_positives,
+        COUNT(CASE WHEN customer_action_type = 'NOT_A_COMPROMISE' THEN 1 ELSE NULL END) AS false_positives
+    FROM 
+        joined_data
+    GROUP BY 
+        event_month
+),
+monthly_fdr AS (
+    -- Calculate the FNR for each month
+    SELECT 
+        event_month,
+        false_positives,
+        true_positives,
+        CASE 
+            WHEN (true_positives + false_positives) > 0 THEN 
+                false_positives * 100.0 / (true_positives + false_positives)
+            ELSE 
+                0
+        END AS fdr
+    FROM 
+        monthly_metrics
+)
+
+-- Calculate the average monthly FNR
+SELECT 
+    ROUND(AVG(fdr), 2) AS avg_monthly_fdr
+FROM 
+    monthly_fdr;
