@@ -1,0 +1,144 @@
+CREATE OR REPLACE TABLE combined_metrics AS
+WITH 
+-- Step 1: Join the relevant tables for Query 1 and Query 2
+joined_data AS (
+    SELECT 
+        ue.event_timestamp,
+        de.event_timestamp AS detector_event_timestamp,
+        ca.customer_action_type,
+        cce.reported_event_id AS customer_reported_events,
+        de.detector_id,
+        de.confidence_level,
+        date_part('month', ue.event_timestamp) AS event_month
+    FROM 
+        user_events AS ue
+    LEFT JOIN 
+        detector_events de
+    ON 
+        ue.customer_id = de.customer_id 
+        AND ue.user_id = de.user_id
+        AND ue.event_id = de.event_id
+    LEFT JOIN 
+        case_events ce
+    ON 
+        ue.customer_id = ce.customer_id
+        AND ue.user_id = ce.user_id
+        AND ue.event_id = ce.triggering_event_id
+    LEFT JOIN 
+        customer_action_events ca
+    ON 
+        ce.customer_id = ca.customer_id
+        AND ce.case_id = ca.case_id
+    LEFT JOIN 
+        customer_case_events AS cce
+    ON 
+        cce.customer_id = ue.customer_id
+        AND cce.user_id = ue.user_id
+        AND cce.reported_event_id = ue.event_id
+),
+-- Step 2: Metrics for Query 1 (Average Monthly False Negative Rate)
+monthly_fnr AS (
+    SELECT 
+        event_month,
+        COUNT(CASE WHEN customer_action_type IS NOT NULL AND customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) AS true_positives,
+        COUNT(CASE WHEN customer_reported_events IS NOT NULL THEN 1 ELSE NULL END) AS false_negatives,
+        CASE 
+            WHEN (true_positives + false_negatives) > 0 THEN 
+                false_negatives * 100.0 / (true_positives + false_negatives)
+            ELSE 
+                0
+        END AS fnr
+    FROM 
+        joined_data
+    GROUP BY 
+        event_month
+),
+-- Step 3: Metrics for Query 2 (Average Monthly False Discovery Rate)
+monthly_fdr AS (
+    SELECT 
+        event_month,
+        COUNT(CASE WHEN customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) AS true_positives,
+        COUNT(CASE WHEN customer_action_type = 'NOT_A_COMPROMISE' THEN 1 ELSE NULL END) AS false_positives,
+        CASE 
+            WHEN (true_positives + false_positives) > 0 THEN 
+                false_positives * 100.0 / (true_positives + false_positives)
+            ELSE 
+                0
+        END AS fdr
+    FROM 
+        joined_data
+    GROUP BY 
+        event_month
+),
+-- Step 4: Fraction of User Events Flagged
+flagged_events AS (
+    SELECT
+        COUNT(ue.user_id) AS total_events,
+        SUM(CASE WHEN de.detector_id IS NOT NULL THEN 1 ELSE 0 END) AS flagged_any_confidence,
+        SUM(CASE WHEN de.detector_id IS NOT NULL AND de.confidence_level = 'HIGH' THEN 1 ELSE 0 END) AS flagged_high_confidence
+    FROM
+        user_events AS ue
+    LEFT JOIN 
+        detector_events AS de 
+    ON 
+        ue.customer_id = de.customer_id 
+        AND ue.user_id = de.user_id
+        AND ue.event_id = de.event_id
+),
+-- Step 5: Precision of Each Detector
+detector_precision AS (
+    SELECT
+        de.detector_id,
+        COUNT(CASE WHEN ca.customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) AS true_positives,
+        COUNT(CASE WHEN ca.customer_action_type = 'NOT_A_COMPROMISE' THEN 1 ELSE NULL END) AS false_positives,
+        CASE 
+            WHEN (COUNT(CASE WHEN ca.customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) 
+                  + COUNT(CASE WHEN ca.customer_action_type = 'NOT_A_COMPROMISE' THEN 1 ELSE NULL END)) > 0 THEN 
+                COUNT(CASE WHEN ca.customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) * 100.0 /
+                (COUNT(CASE WHEN ca.customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) 
+                 + COUNT(CASE WHEN ca.customer_action_type = 'NOT_A_COMPROMISE' THEN 1 ELSE NULL END))
+            ELSE 
+                0
+        END AS precision
+    FROM
+        detector_events AS de
+    LEFT JOIN 
+        case_events ce
+    ON 
+        de.event_id = ce.triggering_event_id
+    LEFT JOIN 
+        customer_action_events ca
+    ON 
+        ce.case_id = ca.case_id
+    GROUP BY 
+        de.detector_id
+),
+-- Combine All Metrics
+combined_data AS (
+    SELECT 
+        COALESCE(fnr.event_month, fdr.event_month) AS event_month,
+        fnr.true_positives AS fnr_true_positives,
+        fnr.false_negatives AS fnr_false_negatives,
+        fnr.fnr AS monthly_fnr,
+        fdr.true_positives AS fdr_true_positives,
+        fdr.false_positives AS fdr_false_positives,
+        fdr.fdr AS monthly_fdr,
+        fe.total_events AS total_user_events,
+        fe.flagged_any_confidence,
+        fe.flagged_high_confidence,
+        dp.detector_id,
+        dp.precision AS detector_precision
+    FROM 
+        monthly_fnr AS fnr
+    FULL OUTER JOIN 
+        monthly_fdr AS fdr
+    ON 
+        fnr.event_month = fdr.event_month
+    CROSS JOIN 
+        flagged_events AS fe
+    CROSS JOIN 
+        detector_precision AS dp
+)
+-- Insert Combined Metrics into Final Table
+SELECT * 
+FROM combined_data;
