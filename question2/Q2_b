@@ -5,13 +5,19 @@ WITH joined_data AS (
         ca.customer_action_type,
         date_part( 'month', de.event_timestamp) AS event_month
     FROM 
+        user_events as ue 
+    LEFT JOIN
         detector_events de
+    ON 
+        ue.customer_id = de.customer_id 
+        AND ue.user_id = de.user_id
+        AND ue.event_id = de.event_id
     LEFT JOIN 
         case_events ce
     ON 
-        de.customer_id = ce.customer_id
-        AND de.user_id = ce.user_id
-        AND de.event_id = ce.triggering_event_id
+        ue.customer_id = ce.customer_id
+        AND ue.user_id = ce.user_id
+        AND ue.event_id = ce.triggering_event_id
     LEFT JOIN 
         customer_action_events ca
     ON 
@@ -45,7 +51,6 @@ monthly_fdr AS (
         monthly_metrics
 )
 
--- select * from monthly_metrics
 -- Calculate the average monthly FNR
 SELECT 
     ROUND(AVG(fdr), 2) AS avg_monthly_fdr

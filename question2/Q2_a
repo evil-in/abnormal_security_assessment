@@ -1,0 +1,66 @@
+WITH joined_data AS (
+    -- Join the tables using the provided join conditions
+    SELECT 
+        ue.event_timestamp,
+        ca.customer_action_type,
+        cce.reported_event_id AS customer_reported_events,
+        date_part( 'month', ue.event_timestamp) AS event_month
+    FROM 
+        user_events as ue 
+    LEFT JOIN
+        detector_events de
+    ON 
+        ue.customer_id = de.customer_id 
+        AND ue.user_id = de.user_id
+        AND ue.event_id = de.event_id
+    LEFT JOIN 
+        case_events ce
+    ON 
+        ue.customer_id = ce.customer_id
+        AND ue.user_id = ce.user_id
+        AND ue.event_id = ce.triggering_event_id
+    LEFT JOIN 
+        customer_action_events ca
+    ON 
+        ce.customer_id = ca.customer_id
+        AND ce.case_id = ca.case_id
+    LEFT JOIN 
+        customer_case_events AS cce
+    ON 
+        cce.customer_id = ue.customer_id
+        AND cce.user_id = ue.user_id
+        AND cce.reported_event_id = ue.event_id
+),
+-- select * from joined_data;
+monthly_metrics AS (
+    -- Aggregate true positives and false negatives for each month
+    SELECT 
+        event_month,
+        COUNT(CASE WHEN customer_action_type IS NOT NULL AND customer_action_type = 'RESOLVE' THEN 1 ELSE NULL END) AS true_positives,
+        COUNT(CASE WHEN customer_reported_events IS NOT NULL THEN 1 ELSE NULL END) AS false_negatives
+    FROM 
+        joined_data
+    GROUP BY 
+        event_month
+),
+monthly_fnr AS (
+    -- Calculate the FNR for each month
+    SELECT 
+        event_month,
+        false_negatives,
+        true_positives,
+        CASE 
+            WHEN (true_positives + false_negatives) > 0 THEN 
+                false_negatives * 100.0 / (true_positives + false_negatives)
+            ELSE 
+                0
+        END AS fnr
+    FROM 
+        monthly_metrics
+)
+
+-- Calculate the average monthly FNR
+SELECT 
+    ROUND(AVG(fnr), 2) AS avg_monthly_fnr
+FROM 
+    monthly_fnr;

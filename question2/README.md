@@ -2,10 +2,11 @@
 
 1. What is the average monthly false negative rate (FNR) of the ATO product?
 i. 𝐹𝑁𝑅 = 𝐹𝑁 / (𝑇𝑃 + 𝐹𝑁)
+![alt text](image-4.png)
 
 2. What is the average monthly false discovery rate (FDR) of the ATO product?
 i. 𝐹𝐷𝑅 = 𝐹𝑃 / (𝑇𝑃 + 𝐹𝑃)
-![alt text](image-3.png)
+![alt text](image-5.png)
 
 3. What fraction of user events are flagged by a detector at any confidence? At high confidence?
 ![alt text](image.png)
