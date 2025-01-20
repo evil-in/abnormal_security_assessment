@@ -16,8 +16,8 @@ case is not made visible to the customer, it does not count as either a TP or an
 precision? Which detector has the lowest precision?
 i. 𝑃𝑟𝑒𝑐𝑖𝑠𝑖𝑜𝑛 = 𝑇𝑃 / (𝑇𝑃 + 𝐹𝑃)
 ![alt text](image-2.png)
-**Detector with highest precision:**: Detector 4
-**Detector with lowest precision:**: Detector 3
+- **Detector with highest precision:**: Detector 4
+- **Detector with lowest precision:**: Detector 3
 
 5. Which detector flags the highest number of customer-confirmed true positive cases?
-**Ans:** Detector 5 = 16 (shown in result of Q2 - d)
+- **Ans:** Detector 5 = 16 (shown in result of Q2 - d)
